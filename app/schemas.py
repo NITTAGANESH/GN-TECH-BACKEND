@@ -41,7 +41,10 @@ class FeedbackOut(BaseModel):
 class ChatMessageCreate(BaseModel):
     phone: str = Field(..., min_length=6, max_length=20)
     name: str | None = None
-    sender: str = Field(..., pattern="^(customer|staff)$")
+    message: str = Field(..., min_length=1)
+
+
+class ChatReplyCreate(BaseModel):
     message: str = Field(..., min_length=1)
 
 
@@ -53,6 +56,15 @@ class ChatMessageOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class ChatConversationOut(BaseModel):
+    phone: str
+    name: str | None
+    last_message: str
+    last_sender: str
+    last_message_at: datetime
+    unread_count: int
 
 
 class UploadedImageOut(BaseModel):

@@ -10,9 +10,13 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 @router.post("", response_model=schemas.ChatMessageOut)
 def send_message(payload: schemas.ChatMessageCreate, db: Session = Depends(get_db)):
     customer = crud.get_or_create_customer(db, payload.phone, payload.name)
+    # Sender is always "customer" here regardless of what the client sends -
+    # staff replies go through the admin-only /api/admin/chats/{phone}/reply
+    # endpoint instead, so the public endpoint can't be used to impersonate
+    # staff.
     message = models.ChatMessage(
         customer_id=customer.id,
-        sender=payload.sender,
+        sender="customer",
         message=payload.message,
     )
     db.add(message)

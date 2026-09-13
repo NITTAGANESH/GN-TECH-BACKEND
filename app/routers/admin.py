@@ -170,3 +170,79 @@ def delete_gallery_image(image_id: int, db: Session = Depends(get_db)):
     db.delete(image)
     db.commit()
     return {"ok": True}
+
+
+@router.get("/chats", response_model=list[schemas.ChatConversationOut])
+def list_chats(db: Session = Depends(get_db)):
+    customers_with_chat = (
+        db.query(models.Customer)
+        .join(models.ChatMessage, models.ChatMessage.customer_id == models.Customer.id)
+        .distinct()
+        .all()
+    )
+
+    conversations = []
+    for customer in customers_with_chat:
+        messages = (
+            db.query(models.ChatMessage)
+            .filter(models.ChatMessage.customer_id == customer.id)
+            .order_by(models.ChatMessage.created_at.asc())
+            .all()
+        )
+        if not messages:
+            continue
+
+        last = messages[-1]
+        last_staff_at = next(
+            (m.created_at for m in reversed(messages) if m.sender == "staff"), None
+        )
+        unread_count = sum(
+            1
+            for m in messages
+            if m.sender == "customer" and (last_staff_at is None or m.created_at > last_staff_at)
+        )
+
+        conversations.append(
+            schemas.ChatConversationOut(
+                phone=customer.phone,
+                name=customer.name,
+                last_message=last.message,
+                last_sender=last.sender,
+                last_message_at=last.created_at,
+                unread_count=unread_count,
+            )
+        )
+
+    conversations.sort(key=lambda c: c.last_message_at, reverse=True)
+    return conversations
+
+
+@router.get("/chats/{phone}", response_model=list[schemas.ChatMessageOut])
+def get_chat_thread(phone: str, db: Session = Depends(get_db)):
+    customer = db.query(models.Customer).filter(models.Customer.phone == phone).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="No chat history for this number")
+
+    return (
+        db.query(models.ChatMessage)
+        .filter(models.ChatMessage.customer_id == customer.id)
+        .order_by(models.ChatMessage.created_at.asc())
+        .all()
+    )
+
+
+@router.post("/chats/{phone}/reply", response_model=schemas.ChatMessageOut)
+def reply_to_chat(phone: str, payload: schemas.ChatReplyCreate, db: Session = Depends(get_db)):
+    customer = db.query(models.Customer).filter(models.Customer.phone == phone).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Unknown customer phone number")
+
+    message = models.ChatMessage(
+        customer_id=customer.id,
+        sender="staff",
+        message=payload.message,
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(message)
+    return message
