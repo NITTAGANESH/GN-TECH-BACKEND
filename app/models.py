@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Numeric, func
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Numeric, JSON, func
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -84,4 +84,22 @@ class GalleryImage(Base):
     storage_path = Column(Text, nullable=False)
     title = Column(String(120), nullable=True)
     category = Column(String(50), nullable=False, default="gallery")  # "gallery" | "product"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Bill(Base):
+    __tablename__ = "bills"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bill_number = Column(String(20), unique=True, nullable=False)
+    customer_name = Column(String(120), nullable=False)
+    customer_phone = Column(String(20), nullable=False)
+    items = Column(JSON, nullable=False)  # [{description, quantity, unit_price, amount}]
+    subtotal = Column(Numeric(10, 2), nullable=False)
+    tax_percent = Column(Numeric(5, 2), nullable=False, default=0)
+    tax_amount = Column(Numeric(10, 2), nullable=False, default=0)
+    total = Column(Numeric(10, 2), nullable=False)
+    notes = Column(Text, nullable=True)
+    pdf_url = Column(Text, nullable=True)
+    storage_path = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

@@ -104,6 +104,38 @@ class GalleryImageOut(BaseModel):
         from_attributes = True
 
 
+class BillItemIn(BaseModel):
+    description: str = Field(..., min_length=1, max_length=255)
+    quantity: Decimal = Field(..., gt=0)
+    unit_price: Decimal = Field(..., ge=0)
+
+
+class BillCreate(BaseModel):
+    customer_name: str = Field(..., min_length=1, max_length=120)
+    customer_phone: str = Field(..., min_length=6, max_length=20)
+    items: list[BillItemIn] = Field(..., min_length=1)
+    tax_percent: Decimal = Field(default=Decimal(0), ge=0, le=100)
+    notes: str | None = None
+
+
+class BillOut(BaseModel):
+    id: int
+    bill_number: str
+    customer_name: str
+    customer_phone: str
+    items: list[dict]
+    subtotal: Decimal
+    tax_percent: Decimal
+    tax_amount: Decimal
+    total: Decimal
+    notes: str | None
+    pdf_url: str | None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class AdminStats(BaseModel):
     total_customers: int
     total_contacts: int

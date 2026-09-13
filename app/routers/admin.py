@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
@@ -7,7 +8,8 @@ from sqlalchemy.orm import Session
 from .. import models, schemas
 from ..auth import require_admin
 from ..database import get_db
-from ..storage import upload_image, delete_image
+from ..invoice_pdf import generate_invoice_pdf
+from ..storage import upload_image, delete_image, upload_pdf
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -246,3 +248,85 @@ def reply_to_chat(phone: str, payload: schemas.ChatReplyCreate, db: Session = De
     db.commit()
     db.refresh(message)
     return message
+
+
+@router.post("/bills", response_model=schemas.BillOut)
+def create_bill(payload: schemas.BillCreate, db: Session = Depends(get_db)):
+    items = []
+    subtotal = Decimal(0)
+    for item in payload.items:
+        amount = item.quantity * item.unit_price
+        subtotal += amount
+        items.append(
+            {
+                "description": item.description,
+                "quantity": float(item.quantity),
+                "unit_price": float(item.unit_price),
+                "amount": float(amount),
+            }
+        )
+
+    tax_amount = (subtotal * payload.tax_percent / Decimal(100)).quantize(Decimal("0.01"))
+    total = subtotal + tax_amount
+
+    # bill_number is derived from the row's own database-assigned id once it
+    # exists, which is the only value guaranteed to never collide - even
+    # after older bills are deleted (unlike a row count or "max + 1", which
+    # can repeat a number that's still in use elsewhere). A random
+    # placeholder satisfies the NOT NULL/unique constraint for the brief
+    # window before the real id is known.
+    bill = models.Bill(
+        bill_number=f"tmp{uuid.uuid4().hex[:12]}",
+        customer_name=payload.customer_name,
+        customer_phone=payload.customer_phone,
+        items=items,
+        subtotal=subtotal,
+        tax_percent=payload.tax_percent,
+        tax_amount=tax_amount,
+        total=total,
+        notes=payload.notes,
+    )
+    db.add(bill)
+    db.commit()
+    db.refresh(bill)
+
+    bill.bill_number = f"INV-{bill.id:04d}"
+    db.commit()
+    db.refresh(bill)
+
+    try:
+        pdf_bytes = generate_invoice_pdf(bill)
+        public_url, storage_path = upload_pdf(pdf_bytes, f"{bill.bill_number}.pdf")
+        bill.pdf_url = public_url
+        bill.storage_path = storage_path
+        db.commit()
+        db.refresh(bill)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Bill saved but PDF generation failed: {exc}")
+
+    return bill
+
+
+@router.get("/bills", response_model=list[schemas.BillOut])
+def list_bills(db: Session = Depends(get_db)):
+    return db.query(models.Bill).order_by(models.Bill.created_at.desc()).all()
+
+
+@router.get("/bills/{bill_id}", response_model=schemas.BillOut)
+def get_bill(bill_id: int, db: Session = Depends(get_db)):
+    bill = db.query(models.Bill).filter(models.Bill.id == bill_id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    return bill
+
+
+@router.delete("/bills/{bill_id}")
+def delete_bill(bill_id: int, db: Session = Depends(get_db)):
+    bill = db.query(models.Bill).filter(models.Bill.id == bill_id).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found")
+    if bill.storage_path:
+        delete_image(bill.storage_path)
+    db.delete(bill)
+    db.commit()
+    return {"ok": True}
