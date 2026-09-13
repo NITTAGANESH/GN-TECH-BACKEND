@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Numeric, func
 from sqlalchemy.orm import relationship
 
 from .database import Base
@@ -64,3 +64,24 @@ class UploadedImage(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     customer = relationship("Customer", back_populates="uploads")
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    type = Column(String(10), nullable=False)  # "income" | "expense"
+    description = Column(String(255), nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class GalleryImage(Base):
+    __tablename__ = "gallery_images"
+
+    id = Column(Integer, primary_key=True, index=True)
+    url = Column(Text, nullable=False)
+    storage_path = Column(Text, nullable=False)
+    title = Column(String(120), nullable=True)
+    category = Column(String(50), nullable=False, default="gallery")  # "gallery" | "product"
+    created_at = Column(DateTime(timezone=True), server_default=func.now())

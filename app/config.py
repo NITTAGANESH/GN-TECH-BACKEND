@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     supabase_service_key: str
     supabase_storage_bucket: str = "gn-tech-uploads"
     allowed_origins: str = "http://localhost:5173"
+    admin_token: str = "changeme"
 
     @property
     def allowed_origins_list(self) -> list[str]:

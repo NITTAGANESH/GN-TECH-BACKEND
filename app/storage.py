@@ -27,3 +27,8 @@ def upload_image(file_bytes: bytes, filename: str, content_type: str) -> tuple[s
     )
     public_url = bucket.get_public_url(storage_path)
     return public_url, storage_path
+
+
+def delete_image(storage_path: str) -> None:
+    client = get_supabase()
+    client.storage.from_(settings.supabase_storage_bucket).remove([storage_path])

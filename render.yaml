@@ -18,3 +18,5 @@ services:
         value: gn-tech-uploads
       - key: ALLOWED_ORIGINS
         value: https://gn-tech.vercel.app,http://localhost:5173
+      - key: ADMIN_TOKEN
+        sync: false
