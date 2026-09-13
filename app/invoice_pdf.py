@@ -116,8 +116,17 @@ def generate_invoice_pdf(bill) -> bytes:
     pdf.cell(label_w, 9, "Total", align="R")
     pdf.cell(value_w, 9, _fmt(bill.total), align="R", ln=1)
 
-    if bill.notes:
+    if bill.warranty:
         pdf.ln(8)
+        pdf.set_font("Helvetica", "B", 9)
+        pdf.set_text_color(*NAVY)
+        pdf.cell(0, 6, "Warranty", ln=1)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(*MUTED)
+        pdf.multi_cell(0, 5, bill.warranty)
+
+    if bill.notes:
+        pdf.ln(bill.warranty and 4 or 8)
         pdf.set_font("Helvetica", "B", 9)
         pdf.set_text_color(*NAVY)
         pdf.cell(0, 6, "Notes", ln=1)
@@ -130,7 +139,35 @@ def generate_invoice_pdf(bill) -> bytes:
     # this, positioning the footer close to the bottom (which is the whole
     # point of a footer) reliably triggers a spurious blank second page.
     pdf.set_auto_page_break(False)
-    pdf.set_y(-25)
+
+    # Signature block - "Ganesh" rendered in an italic script-like style as
+    # the authorized signature, with a line and caption beneath it. This is
+    # a rendered text signature (no separate image upload flow), positioned
+    # above the footer so both fit without overlapping. Normally pinned near
+    # the bottom of the page, but if a long item list plus warranty/notes
+    # has already pushed the cursor past that point, fall back to placing it
+    # right after the content instead - it would otherwise print on top of
+    # the notes text.
+    sig_x, sig_w = 130, 65
+    content_bottom = pdf.get_y()
+    pinned_sig_top = pdf.h - 50
+    sig_top = content_bottom + 6 if content_bottom > pinned_sig_top - 6 else pinned_sig_top
+    pdf.set_xy(sig_x, sig_top)
+    pdf.set_font("Times", "BI", 22)
+    pdf.set_text_color(*NAVY)
+    pdf.cell(sig_w, 12, "Ganesh", align="C", ln=2)
+    pdf.set_x(sig_x)
+    pdf.set_draw_color(*BORDER)
+    pdf.line(sig_x, pdf.get_y(), sig_x + sig_w, pdf.get_y())
+    pdf.ln(2)
+    pdf.set_x(sig_x)
+    pdf.set_font("Helvetica", "", 8)
+    pdf.set_text_color(*MUTED)
+    pdf.cell(sig_w, 5, "Authorized Signatory", align="C")
+    sig_bottom = pdf.get_y()
+
+    footer_y = max(pdf.h - 25, sig_bottom + 8)
+    pdf.set_y(footer_y)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(*MUTED)
     pdf.cell(0, 6, "Thank you for choosing GN Tech Solutions!", align="C")

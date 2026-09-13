@@ -100,6 +100,7 @@ class Bill(Base):
     tax_percent = Column(Numeric(5, 2), nullable=False, default=0)
     tax_amount = Column(Numeric(10, 2), nullable=False, default=0)
     total = Column(Numeric(10, 2), nullable=False)
+    warranty = Column(String(255), nullable=True)
     notes = Column(Text, nullable=True)
     pdf_url = Column(Text, nullable=True)
     storage_path = Column(Text, nullable=True)

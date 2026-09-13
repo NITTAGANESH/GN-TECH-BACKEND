@@ -291,6 +291,7 @@ def create_bill(payload: schemas.BillCreate, db: Session = Depends(get_db)):
         tax_percent=payload.tax_percent,
         tax_amount=tax_amount,
         total=total,
+        warranty=payload.warranty,
         notes=payload.notes,
     )
     db.add(bill)

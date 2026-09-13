@@ -115,6 +115,7 @@ class BillCreate(BaseModel):
     customer_phone: str = Field(..., min_length=6, max_length=20)
     items: list[BillItemIn] = Field(..., min_length=1)
     tax_percent: Decimal = Field(default=Decimal(0), ge=0, le=100)
+    warranty: str | None = None
     notes: str | None = None
 
 
@@ -128,6 +129,7 @@ class BillOut(BaseModel):
     tax_percent: Decimal
     tax_amount: Decimal
     total: Decimal
+    warranty: str | None
     notes: str | None
     pdf_url: str | None
     created_at: datetime
