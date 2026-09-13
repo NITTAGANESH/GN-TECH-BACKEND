@@ -92,6 +92,7 @@ class Bill(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     bill_number = Column(String(20), unique=True, nullable=False)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=True)
     customer_name = Column(String(120), nullable=False)
     customer_phone = Column(String(20), nullable=False)
     items = Column(JSON, nullable=False)  # [{description, quantity, unit_price, amount}]

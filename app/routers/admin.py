@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from .. import models, schemas
+from .. import crud, models, schemas
 from ..auth import require_admin
 from ..database import get_db
 from ..invoice_pdf import generate_invoice_pdf
@@ -269,6 +269,12 @@ def create_bill(payload: schemas.BillCreate, db: Session = Depends(get_db)):
     tax_amount = (subtotal * payload.tax_percent / Decimal(100)).quantize(Decimal("0.01"))
     total = subtotal + tax_amount
 
+    # Billing a phone number links it to the same customers table used by
+    # contacts/feedback/chat/uploads, so a billed customer's history is all
+    # tied together and they count toward admin stats - not just a name and
+    # phone number sitting only on the bill itself.
+    customer = crud.get_or_create_customer(db, payload.customer_phone, payload.customer_name)
+
     # bill_number is derived from the row's own database-assigned id once it
     # exists, which is the only value guaranteed to never collide - even
     # after older bills are deleted (unlike a row count or "max + 1", which
@@ -277,6 +283,7 @@ def create_bill(payload: schemas.BillCreate, db: Session = Depends(get_db)):
     # window before the real id is known.
     bill = models.Bill(
         bill_number=f"tmp{uuid.uuid4().hex[:12]}",
+        customer_id=customer.id,
         customer_name=payload.customer_name,
         customer_phone=payload.customer_phone,
         items=items,
