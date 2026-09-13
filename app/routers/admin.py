@@ -290,7 +290,7 @@ def create_bill(payload: schemas.BillCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(bill)
 
-    bill.bill_number = f"INV-{bill.id:04d}"
+    bill.bill_number = f"GN-{bill.id:05d}"
     db.commit()
     db.refresh(bill)
 
