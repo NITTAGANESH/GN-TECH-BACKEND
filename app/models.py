@@ -87,6 +87,24 @@ class GalleryImage(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class SiteSetting(Base):
+    __tablename__ = "site_settings"
+
+    key = Column(String(80), primary_key=True)
+    value = Column(Text, nullable=True)
+
+
+class ReviewItem(Base):
+    __tablename__ = "review_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    author = Column(String(120), nullable=False)
+    rating = Column(Integer, nullable=False)
+    text = Column(Text, nullable=True)
+    when_text = Column(String(60), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class Bill(Base):
     __tablename__ = "bills"
 

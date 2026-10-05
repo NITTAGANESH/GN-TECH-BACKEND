@@ -1,95 +1,98 @@
-import time
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
-import httpx
-from fastapi import APIRouter
-
-from ..config import settings
+from .. import models
+from ..auth import require_admin
+from ..database import get_db
 
 router = APIRouter(prefix="/api/reviews", tags=["reviews"])
+admin_router = APIRouter(
+    prefix="/api/admin/reviews", tags=["admin"], dependencies=[Depends(require_admin)]
+)
 
-CACHE_TTL_SECONDS = 6 * 60 * 60  # Google data barely changes; keeps API usage tiny
-_cache: dict = {"data": None, "fetched_at": 0.0}
-_resolved_place_id: str | None = None
-
-
-def _resolve_place_id(client: httpx.Client) -> str | None:
-    global _resolved_place_id
-    if settings.google_place_id:
-        return settings.google_place_id
-    if _resolved_place_id:
-        return _resolved_place_id
-
-    resp = client.post(
-        "https://places.googleapis.com/v1/places:searchText",
-        headers={
-            "X-Goog-Api-Key": settings.google_places_api_key,
-            "X-Goog-FieldMask": "places.id",
-        },
-        json={"textQuery": settings.google_place_query},
-    )
-    resp.raise_for_status()
-    places = resp.json().get("places", [])
-    if places:
-        _resolved_place_id = places[0]["id"]
-    return _resolved_place_id
+SUMMARY_KEYS = ("rating", "total", "maps_url", "write_url")
 
 
-def _fetch_from_google() -> dict:
-    with httpx.Client(timeout=15) as client:
-        place_id = _resolve_place_id(client)
-        if not place_id:
-            raise RuntimeError("Could not find the business on Google Places")
+class SummaryIn(BaseModel):
+    rating: float | None = Field(default=None, ge=0, le=5)
+    total: int | None = Field(default=None, ge=0)
+    maps_url: str | None = None
+    write_url: str | None = None
 
-        resp = client.get(
-            f"https://places.googleapis.com/v1/places/{place_id}",
-            headers={
-                "X-Goog-Api-Key": settings.google_places_api_key,
-                "X-Goog-FieldMask": "rating,userRatingCount,reviews,googleMapsUri",
-            },
-        )
-        resp.raise_for_status()
-        place = resp.json()
 
-    reviews = []
-    for r in place.get("reviews", []):
-        author = r.get("authorAttribution", {})
-        text = (r.get("text") or r.get("originalText") or {}).get("text", "")
-        reviews.append(
-            {
-                "author": author.get("displayName", "Google user"),
-                "photo": author.get("photoUri"),
-                "rating": r.get("rating", 5),
-                "text": text,
-                "when": r.get("relativePublishTimeDescription", ""),
-            }
-        )
+class ReviewIn(BaseModel):
+    author: str = Field(..., min_length=1, max_length=120)
+    rating: int = Field(..., ge=1, le=5)
+    text: str | None = None
+    when: str | None = Field(default=None, max_length=60)
 
+
+def _get_setting(db: Session, key: str) -> str | None:
+    row = db.query(models.SiteSetting).filter(models.SiteSetting.key == f"reviews_{key}").first()
+    return row.value if row and row.value not in (None, "") else None
+
+
+def _payload(db: Session) -> dict:
+    rating = _get_setting(db, "rating")
+    total = _get_setting(db, "total")
+    items = db.query(models.ReviewItem).order_by(models.ReviewItem.id.desc()).all()
     return {
-        "configured": True,
-        "rating": place.get("rating"),
-        "total": place.get("userRatingCount"),
-        "maps_url": place.get("googleMapsUri"),
-        "reviews": reviews,
+        "configured": bool(rating or total or items),
+        "rating": float(rating) if rating else None,
+        "total": int(total) if total else None,
+        "maps_url": _get_setting(db, "maps_url"),
+        "write_url": _get_setting(db, "write_url"),
+        "reviews": [
+            {"id": r.id, "author": r.author, "rating": r.rating, "text": r.text or "", "when": r.when_text or ""}
+            for r in items
+        ],
     }
 
 
 @router.get("")
-def get_reviews():
-    if not settings.google_places_api_key:
-        return {"configured": False}
+def get_reviews(db: Session = Depends(get_db)):
+    return _payload(db)
 
-    now = time.time()
-    if _cache["data"] and now - _cache["fetched_at"] < CACHE_TTL_SECONDS:
-        return _cache["data"]
 
-    try:
-        data = _fetch_from_google()
-    except Exception:
-        # Serve stale data rather than failing the page if Google hiccups.
-        if _cache["data"]:
-            return _cache["data"]
-        return {"configured": False}
+@admin_router.get("")
+def admin_get_reviews(db: Session = Depends(get_db)):
+    return _payload(db)
 
-    _cache["data"] = data
-    _cache["fetched_at"] = now
-    return data
+
+@admin_router.put("/summary")
+def save_summary(payload: SummaryIn, db: Session = Depends(get_db)):
+    for key in SUMMARY_KEYS:
+        value = getattr(payload, key)
+        row = db.query(models.SiteSetting).filter(models.SiteSetting.key == f"reviews_{key}").first()
+        value = "" if value is None else str(value).strip()
+        if row:
+            row.value = value
+        else:
+            db.add(models.SiteSetting(key=f"reviews_{key}", value=value))
+    db.commit()
+    return _payload(db)
+
+
+@admin_router.post("/items")
+def add_review(payload: ReviewIn, db: Session = Depends(get_db)):
+    db.add(
+        models.ReviewItem(
+            author=payload.author.strip(),
+            rating=payload.rating,
+            text=(payload.text or "").strip() or None,
+            when_text=(payload.when or "").strip() or None,
+        )
+    )
+    db.commit()
+    return _payload(db)
+
+
+@admin_router.delete("/items/{review_id}")
+def delete_review(review_id: int, db: Session = Depends(get_db)):
+    row = db.query(models.ReviewItem).filter(models.ReviewItem.id == review_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Review not found")
+    db.delete(row)
+    db.commit()
+    return _payload(db)

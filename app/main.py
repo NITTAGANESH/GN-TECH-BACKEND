@@ -25,6 +25,7 @@ app.include_router(uploads.router)
 app.include_router(gallery.router)
 app.include_router(admin.router)
 app.include_router(reviews.router)
+app.include_router(reviews.admin_router)
 
 
 @app.get("/")
