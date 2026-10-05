@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .database import Base, engine
 from . import models  # noqa: F401 (ensures models are registered before create_all)
-from .routers import contacts, feedback, chat, uploads, gallery, admin
+from .routers import contacts, feedback, chat, uploads, gallery, admin, reviews
 
 Base.metadata.create_all(bind=engine)
 
@@ -24,6 +24,7 @@ app.include_router(chat.router)
 app.include_router(uploads.router)
 app.include_router(gallery.router)
 app.include_router(admin.router)
+app.include_router(reviews.router)
 
 
 @app.get("/")

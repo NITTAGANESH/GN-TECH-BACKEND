@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     supabase_storage_bucket: str = "gn-tech-uploads"
     allowed_origins: str = "http://localhost:5173"
     admin_token: str = "changeme"
+    google_places_api_key: str = ""
+    google_place_id: str = ""
+    google_place_query: str = "GN TECH SOLUTIONS Computer Repair Center Boduppal Hyderabad"
 
     @property
     def allowed_origins_list(self) -> list[str]:
